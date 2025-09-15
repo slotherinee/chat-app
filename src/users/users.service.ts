@@ -1,18 +1,19 @@
 import { Injectable } from '@nestjs/common';
 import { User } from './users.types';
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class UsersService {
-  private readonly users = [
+  private readonly users: User[] = [
     {
       userId: 1,
       username: 'john',
-      password: 'changeme',
+      password: bcrypt.hashSync('pass', 10),
     },
     {
       userId: 2,
       username: 'maria',
-      password: 'guess',
+      password: bcrypt.hashSync('password', 10),
     },
   ];
 
