@@ -1391,7 +1391,6 @@
               this.newMessage = '';
               this.scrollToBottom();
 
-              // Simulate message status updates
               setTimeout(() => {
                 message.status = 'delivered';
               }, 1000);
@@ -1400,7 +1399,6 @@
                 message.status = 'read';
               }, 3000);
 
-              // Move chat to top of list
               const chatIndex = this.chats.findIndex(
                 (c) => c.id === this.selectedChat.id,
               );
@@ -1415,9 +1413,12 @@
             const list = this.searchResults.length
               ? this.searchResults
               : this.availableUsers;
-            return list.filter((u) =>
-              u.name.toLowerCase().includes(this.newChatSearch.toLowerCase()),
-            );
+            const q = (this.newChatSearch || '').toLowerCase();
+            return list.filter((u) => {
+              const name = (u.name || '').toLowerCase();
+              const username = (u.username || '').toLowerCase();
+              return name.includes(q) || username.includes(q);
+            });
           },
 
           async searchUser() {
@@ -1428,10 +1429,10 @@
                 `/users/${encodeURIComponent(q)}`,
               );
               if (res) {
+                const displayName = (res.name || '').trim();
                 const user = {
                   id: res.id,
-                  name:
-                    (res.name || '') + (res.surname ? ' ' + res.surname : ''),
+                  name: displayName || res.username || '',
                   isOnline: false,
                   username: res.username,
                   avatarUrl: res.avatarUrl || null,
@@ -1478,7 +1479,6 @@
                 this.$refs.messagesContainer.scrollTop =
                   this.$refs.messagesContainer.scrollHeight;
               }
-              // Focus the message input when scrolling to bottom (e.g. after selecting/opening a chat)
               if (
                 this.$refs.messageInput &&
                 typeof this.$refs.messageInput.focus === 'function'

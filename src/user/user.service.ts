@@ -23,12 +23,18 @@ export class UserService {
     });
   }
 
-  async findOne(username: string) {
-    return this.prisma.user.findUnique({ where: { username } });
+  async findOne(username: string, passwordExcluded = true) {
+    return this.prisma.user.findUnique({
+      where: { username },
+      omit: passwordExcluded ? { password: true } : {},
+    });
   }
 
-  async findById(id: string) {
-    return this.prisma.user.findUnique({ where: { id } });
+  async findById(id: string, passwordExcluded = true) {
+    return this.prisma.user.findUnique({
+      where: { id },
+      omit: passwordExcluded ? { password: true } : {},
+    });
   }
 
   async updateAvatar(
