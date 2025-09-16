@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   Param,
   Post,
   Put,
@@ -17,6 +18,11 @@ import type { Request } from 'express';
 @Controller('users')
 export class UserController {
   constructor(private readonly userService: UserService) {}
+
+  @Get('/:username')
+  async findOne(@Param('username') username: string) {
+    return this.userService.findOne(username);
+  }
 
   @Post()
   async create(@Body() userData: Omit<User, 'id' | 'createdAt' | 'updatedAt'>) {
