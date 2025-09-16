@@ -10,6 +10,7 @@ import { UserModule } from './user/user.module';
   imports: [
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', 'public'),
+      serveRoot: '/',
       exclude: ['/api/{*test}'],
       serveStaticOptions: {
         fallthrough: false,

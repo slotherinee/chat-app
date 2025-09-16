@@ -2,6 +2,7 @@
 /dist
 /node_modules
 /build
+/public/user_avatars/
 
 # Logs
 logs

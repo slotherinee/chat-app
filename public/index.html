@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en" class="h-full">
   <head>
     <meta charset="UTF-8" />
@@ -14,14 +14,14 @@
         theme: {
           extend: {
             colors: {
-              primary: "#3b82f6",
-              "primary-dark": "#2563eb",
-              "primary-light": "#60a5fa",
+              primary: '#3b82f6',
+              'primary-dark': '#2563eb',
+              'primary-light': '#60a5fa',
             },
             borderRadius: {
-              "2xl": "1rem",
-              "3xl": "1.5rem",
-              "4xl": "2rem",
+              '2xl': '1rem',
+              '3xl': '1.5rem',
+              '4xl': '2rem',
             },
           },
         },
@@ -43,7 +43,7 @@
         position: relative;
       }
       .online-indicator::after {
-        content: "";
+        content: '';
         position: absolute;
         bottom: 0;
         right: 0;
@@ -90,11 +90,11 @@
             <div class="space-y-4">
               <div>
                 <input
-                  x-model="loginForm.email"
-                  type="email"
+                  x-model="loginForm.username"
+                  type="text"
                   required
                   class="w-full px-6 py-4 border-0 rounded-2xl focus:ring-4 focus:ring-white/50 focus:outline-none transition-all duration-200 text-lg"
-                  placeholder="Email address"
+                  placeholder="Username"
                 />
               </div>
               <div>
@@ -185,15 +185,6 @@
               </div>
               <div>
                 <input
-                  x-model="registerForm.email"
-                  type="email"
-                  required
-                  class="w-full px-4 py-3 border-0 rounded-2xl focus:ring-4 focus:ring-white/50 focus:outline-none transition-all duration-200"
-                  placeholder="Email address"
-                />
-              </div>
-              <div>
-                <input
                   x-model="registerForm.password"
                   type="password"
                   required
@@ -209,6 +200,17 @@
                   class="w-full px-4 py-3 border-0 rounded-2xl focus:ring-4 focus:ring-white/50 focus:outline-none transition-all duration-200"
                   placeholder="Confirm password"
                 />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-white/80 mb-2"
+                  >About you</label
+                >
+                <textarea
+                  x-model="registerForm.description"
+                  class="w-full px-4 py-3 border-0 rounded-2xl focus:ring-4 focus:ring-white/50 focus:outline-none transition-all duration-200 resize-none"
+                  rows="3"
+                  placeholder="Tell us something about yourself (optional)"
+                ></textarea>
               </div>
             </div>
 
@@ -255,10 +257,18 @@
               <div
                 class="h-12 w-12 bg-white rounded-full flex items-center justify-center online-indicator"
               >
-                <span
-                  class="text-primary font-semibold text-lg"
-                  x-text="user.firstName.charAt(0)"
-                ></span>
+                <template x-if="user.avatar_url">
+                  <img
+                    :src="user.avatar_url"
+                    class="h-12 w-12 rounded-full object-cover"
+                  />
+                </template>
+                <template x-if="!user.avatar_url">
+                  <span
+                    class="text-primary font-semibold text-lg"
+                    x-text="(user.firstName || '').charAt(0)"
+                  ></span>
+                </template>
               </div>
               <div>
                 <h2
@@ -541,6 +551,7 @@
             >
               <div class="flex-1">
                 <textarea
+                  x-ref="messageInput"
                   x-model="newMessage"
                   class="w-full px-4 py-3 bg-gray-100 rounded-3xl focus:outline-none focus:ring-4 focus:ring-primary/20 focus:bg-white transition-all duration-200 resize-none"
                   placeholder="Write a message..."
@@ -624,14 +635,33 @@
               <div
                 class="h-24 w-24 mx-auto bg-primary rounded-full flex items-center justify-center mb-4 online-indicator"
               >
-                <span
-                  class="text-white text-3xl font-semibold"
-                  x-text="user.firstName.charAt(0)"
-                ></span>
+                <template x-if="user.avatar_url">
+                  <img
+                    :src="user.avatar_url"
+                    class="h-24 w-24 rounded-full object-cover"
+                  />
+                </template>
+                <template x-if="!user.avatar_url">
+                  <span
+                    class="text-white text-3xl font-semibold"
+                    x-text="(user.firstName || '').charAt(0)"
+                  ></span>
+                </template>
               </div>
-              <button class="text-primary hover:text-primary-dark font-medium">
+              <button
+                type="button"
+                class="text-primary hover:text-primary-dark font-medium cursor-pointer"
+                @click.prevent="$refs.avatarInput && $refs.avatarInput.click()"
+              >
                 Change Picture
               </button>
+              <input
+                type="file"
+                accept="image/*"
+                @change="onFileChange"
+                x-ref="avatarInput"
+                class="sr-only"
+              />
             </div>
 
             <form @submit.prevent="updateProfile" class="space-y-6">
@@ -674,10 +704,10 @@
 
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-2"
-                  >Bio</label
+                  >Description</label
                 >
                 <textarea
-                  x-model="editProfile.bio"
+                  x-model="editProfile.description"
                   class="w-full px-4 py-3 border border-gray-300 rounded-2xl focus:ring-4 focus:ring-primary/20 focus:border-primary transition-all duration-200 resize-none"
                   rows="3"
                   placeholder="Tell us about yourself..."
@@ -755,10 +785,18 @@
                 class="h-24 w-24 mx-auto rounded-full flex items-center justify-center mb-4 relative"
                 :class="[selectedChat?.isOnline ? 'bg-primary online-indicator' : 'bg-gray-400 offline-indicator']"
               >
-                <span
-                  class="text-white text-3xl font-semibold"
-                  x-text="selectedChat?.name.charAt(0)"
-                ></span>
+                <template x-if="selectedChat?.avatarUrl">
+                  <img
+                    :src="selectedChat.avatarUrl"
+                    class="h-24 w-24 rounded-full object-cover"
+                  />
+                </template>
+                <template x-if="!selectedChat?.avatarUrl">
+                  <span
+                    class="text-white text-3xl font-semibold"
+                    x-text="selectedChat?.name.charAt(0)"
+                  ></span>
+                </template>
               </div>
               <h2
                 class="text-2xl font-semibold text-gray-900"
@@ -918,50 +956,58 @@
     <script>
       function chatApp() {
         return {
-          currentView: "login", // 'login', 'register', 'chat'
-          user: {},
+          currentView: 'login', // 'login', 'register', 'chat'
+          user: {
+            id: null,
+            firstName: '',
+            lastName: '',
+            username: '',
+            description: '',
+            avatar_url: null,
+          },
           loginForm: {
-            email: "",
-            password: "",
+            username: '',
+            password: '',
           },
           registerForm: {
-            firstName: "",
-            lastName: "",
-            username: "",
-            email: "",
-            password: "",
-            confirmPassword: "",
+            firstName: '',
+            lastName: '',
+            username: '',
+            password: '',
+            confirmPassword: '',
+            description: '',
           },
           editProfile: {
-            firstName: "",
-            lastName: "",
-            username: "",
-            bio: "",
+            firstName: '',
+            lastName: '',
+            username: '',
+            description: '',
+            avatar_url: '',
           },
           chats: [
             {
               id: 1,
-              name: "Alice Johnson",
+              name: 'Alice Johnson',
               isOnline: true,
               unreadCount: 2,
               lastMessage: {
-                content: "Hey! How are you doing?",
+                content: 'Hey! How are you doing?',
                 timestamp: new Date(Date.now() - 5 * 60000), // 5 minutes ago
               },
               messages: [
                 {
                   id: 1,
-                  content: "Hello there!",
+                  content: 'Hello there!',
                   sent: false,
                   timestamp: new Date(Date.now() - 30 * 60000),
-                  status: "read",
+                  status: 'read',
                 },
                 {
                   id: 2,
-                  content: "Hi Alice! How are you?",
+                  content: 'Hi Alice! How are you?',
                   sent: true,
                   timestamp: new Date(Date.now() - 25 * 60000),
-                  status: "read",
+                  status: 'read',
                 },
                 {
                   id: 3,
@@ -969,7 +1015,7 @@
                     "I'm doing great! Just finished working on a new project. It's been really exciting to see everything come together.",
                   sent: false,
                   timestamp: new Date(Date.now() - 20 * 60000),
-                  status: "read",
+                  status: 'read',
                 },
                 {
                   id: 4,
@@ -977,7 +1023,7 @@
                     "That's awesome! What kind of project? I'd love to hear more about it.",
                   sent: true,
                   timestamp: new Date(Date.now() - 15 * 60000),
-                  status: "read",
+                  status: 'read',
                 },
                 {
                   id: 5,
@@ -985,24 +1031,24 @@
                     "A new chat application with modern UI design. We've been focusing on making it really user-friendly and responsive.",
                   sent: false,
                   timestamp: new Date(Date.now() - 10 * 60000),
-                  status: "read",
+                  status: 'read',
                 },
                 {
                   id: 6,
-                  content: "Hey! How are you doing?",
+                  content: 'Hey! How are you doing?',
                   sent: false,
                   timestamp: new Date(Date.now() - 5 * 60000),
-                  status: "delivered",
+                  status: 'delivered',
                 },
               ],
             },
             {
               id: 2,
-              name: "Bob Wilson",
+              name: 'Bob Wilson',
               isOnline: false,
               unreadCount: 0,
               lastMessage: {
-                content: "Thanks for the help!",
+                content: 'Thanks for the help!',
                 timestamp: new Date(Date.now() - 2 * 60 * 60000), // 2 hours ago
               },
               messages: [
@@ -1012,32 +1058,32 @@
                     "Can you help me with the backend setup? I'm having some issues with the database configuration.",
                   sent: false,
                   timestamp: new Date(Date.now() - 3 * 60 * 60000),
-                  status: "read",
+                  status: 'read',
                 },
                 {
                   id: 2,
                   content:
-                    "Sure! What specific issues are you running into? I can walk you through the setup process.",
+                    'Sure! What specific issues are you running into? I can walk you through the setup process.',
                   sent: true,
                   timestamp: new Date(Date.now() - 2.5 * 60 * 60000),
-                  status: "read",
+                  status: 'read',
                 },
                 {
                   id: 3,
-                  content: "Thanks for the help!",
+                  content: 'Thanks for the help!',
                   sent: false,
                   timestamp: new Date(Date.now() - 2 * 60 * 60000),
-                  status: "read",
+                  status: 'read',
                 },
               ],
             },
             {
               id: 3,
-              name: "Sarah Davis",
+              name: 'Sarah Davis',
               isOnline: true,
               unreadCount: 5,
               lastMessage: {
-                content: "Can we schedule a meeting tomorrow?",
+                content: 'Can we schedule a meeting tomorrow?',
                 timestamp: new Date(Date.now() - 30 * 60000), // 30 minutes ago
               },
               messages: [
@@ -1047,7 +1093,7 @@
                     "Good morning! Hope you're having a great day so far.",
                   sent: false,
                   timestamp: new Date(Date.now() - 60 * 60000),
-                  status: "read",
+                  status: 'read',
                 },
                 {
                   id: 2,
@@ -1055,24 +1101,24 @@
                     "Morning Sarah! Yes, it's been productive. How about you?",
                   sent: true,
                   timestamp: new Date(Date.now() - 55 * 60000),
-                  status: "read",
+                  status: 'read',
                 },
                 {
                   id: 3,
-                  content: "Can we schedule a meeting tomorrow?",
+                  content: 'Can we schedule a meeting tomorrow?',
                   sent: false,
                   timestamp: new Date(Date.now() - 30 * 60000),
-                  status: "delivered",
+                  status: 'delivered',
                 },
               ],
             },
             {
               id: 4,
-              name: "Mike Thompson",
+              name: 'Mike Thompson',
               isOnline: false,
               unreadCount: 0,
               lastMessage: {
-                content: "See you later!",
+                content: 'See you later!',
                 timestamp: new Date(Date.now() - 24 * 60 * 60000), // 1 day ago
               },
               messages: [
@@ -1082,7 +1128,7 @@
                     "Let's catch up soon, it's been too long since we last talked.",
                   sent: false,
                   timestamp: new Date(Date.now() - 25 * 60 * 60000),
-                  status: "read",
+                  status: 'read',
                 },
                 {
                   id: 2,
@@ -1090,93 +1136,213 @@
                     "Absolutely! Let me know when you're free this week.",
                   sent: true,
                   timestamp: new Date(Date.now() - 24.5 * 60 * 60000),
-                  status: "read",
+                  status: 'read',
                 },
                 {
                   id: 3,
-                  content: "See you later!",
+                  content: 'See you later!',
                   sent: false,
                   timestamp: new Date(Date.now() - 24 * 60 * 60000),
-                  status: "read",
+                  status: 'read',
                 },
               ],
             },
           ],
           selectedChat: null,
-          newMessage: "",
-          searchQuery: "",
+          newMessage: '',
+          searchQuery: '',
           showUserInfo: false,
           showNewChatModal: false,
           showProfileModal: false,
-          newChatSearch: "",
+          newChatSearch: '',
           availableUsers: [
-            { id: 5, name: "Emma Brown", isOnline: true },
-            { id: 6, name: "James Miller", isOnline: false },
-            { id: 7, name: "Lisa Garcia", isOnline: true },
-            { id: 8, name: "Tom Anderson", isOnline: false },
-            { id: 9, name: "Sophie Wilson", isOnline: true },
-            { id: 10, name: "David Chen", isOnline: false },
+            { id: 5, name: 'Emma Brown', isOnline: true },
+            { id: 6, name: 'James Miller', isOnline: false },
+            { id: 7, name: 'Lisa Garcia', isOnline: true },
+            { id: 8, name: 'Tom Anderson', isOnline: false },
+            { id: 9, name: 'Sophie Wilson', isOnline: true },
+            { id: 10, name: 'David Chen', isOnline: false },
           ],
 
           get filteredChats() {
             return this.chats.filter((chat) =>
-              chat.name.toLowerCase().includes(this.searchQuery.toLowerCase())
+              chat.name.toLowerCase().includes(this.searchQuery.toLowerCase()),
             );
           },
 
-          login() {
-            if (this.loginForm.email && this.loginForm.password) {
-              this.user = {
-                id: 1,
-                firstName: "John",
-                lastName: "Doe",
-                username: "johndoe",
-                email: this.loginForm.email,
-                bio: "Love building amazing apps!",
+          // --- API helpers ---
+          apiBase: '/api',
+          async apiUpload(path, formData, opts = {}) {
+            const token = this.getToken();
+            const headers = opts.headers || {};
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+            const res = await fetch(this.apiBase + path, {
+              method: opts.method || 'POST',
+              body: formData,
+              headers,
+            });
+            if (!res.ok) {
+              const text = await res.text();
+              throw new Error(text || res.statusText);
+            }
+            const ct = res.headers.get('content-type') || '';
+            if (ct.includes('application/json')) return res.json();
+            return null;
+          },
+          setToken(token) {
+            try {
+              localStorage.setItem('token', token);
+            } catch (e) {
+              console.warn('Failed to save token', e);
+            }
+          },
+          getToken() {
+            try {
+              return localStorage.getItem('token');
+            } catch (e) {
+              return null;
+            }
+          },
+          clearToken() {
+            try {
+              localStorage.removeItem('token');
+            } catch (e) {}
+          },
+          async apiFetch(path, opts = {}) {
+            const headers = opts.headers || {};
+            headers['Content-Type'] = 'application/json';
+            const token = this.getToken();
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+            const res = await fetch(this.apiBase + path, {
+              ...opts,
+              headers,
+            });
+            if (!res.ok) {
+              const text = await res.text();
+              throw new Error(text || res.statusText);
+            }
+            // attempt parse JSON, if no content return null
+            const ct = res.headers.get('content-type') || '';
+            if (ct.includes('application/json')) return res.json();
+            return null;
+          },
+
+          async login() {
+            if (!this.loginForm.username || !this.loginForm.password) return;
+            try {
+              const payload = {
+                username: this.loginForm.username,
+                password: this.loginForm.password,
               };
-              this.editProfile = { ...this.user };
-              this.currentView = "chat";
-              this.loginForm = { email: "", password: "" };
+              const data = await this.apiFetch('/auth/login', {
+                method: 'POST',
+                body: JSON.stringify(payload),
+              });
+              const token = data?.access_token || data;
+              if (!token) throw new Error('No token received');
+              this.setToken(token);
+              await this.loadProfileAndEnter();
+              this.loginForm = { username: '', password: '' };
+            } catch (err) {
+              alert('Login failed: ' + (err.message || err));
+              console.error(err);
             }
           },
 
-          register() {
+          async register() {
             if (
-              this.registerForm.password === this.registerForm.confirmPassword
+              this.registerForm.password !== this.registerForm.confirmPassword
             ) {
-              this.user = {
-                id: 1,
-                firstName: this.registerForm.firstName,
-                lastName: this.registerForm.lastName,
+              alert('Passwords do not match!');
+              return;
+            }
+            try {
+              const payload = {
                 username: this.registerForm.username,
-                email: this.registerForm.email,
-                bio: "",
+                password: this.registerForm.password,
+                name: this.registerForm.firstName || undefined,
+                surname: this.registerForm.lastName || undefined,
+                description: this.registerForm.description || undefined,
               };
-              this.editProfile = { ...this.user };
-              this.currentView = "chat";
+              const data = await this.apiFetch('/auth/register', {
+                method: 'POST',
+                body: JSON.stringify(payload),
+              });
+              const token = data?.access_token || data;
+              if (!token) throw new Error('No token received');
+              this.setToken(token);
+              await this.loadProfileAndEnter();
               this.registerForm = {
-                firstName: "",
-                lastName: "",
-                username: "",
-                email: "",
-                password: "",
-                confirmPassword: "",
+                firstName: '',
+                lastName: '',
+                username: '',
+                password: '',
+                confirmPassword: '',
+                description: '',
               };
-            } else {
-              alert("Passwords do not match!");
+            } catch (err) {
+              alert('Register failed: ' + (err.message || err));
+              console.error(err);
             }
           },
 
-          updateProfile() {
-            this.user = { ...this.user, ...this.editProfile };
-            this.showProfileModal = false;
-            // Here you would typically send the update to your backend
+          async updateProfile() {
+            // Persist profile changes to backend
+            try {
+              const payload = {
+                name: this.editProfile.firstName || undefined,
+                surname: this.editProfile.lastName || undefined,
+                description: this.editProfile.description || undefined,
+                avatarUrl: this.editProfile.avatar_url || undefined,
+                username: this.editProfile.username || undefined,
+              };
+              await this.apiFetch(`/users/${this.user.id}`, {
+                method: 'PUT',
+                body: JSON.stringify(payload),
+              });
+              // update local model
+              this.user = { ...this.user, ...this.editProfile };
+              this.showProfileModal = false;
+            } catch (err) {
+              alert('Failed to update profile: ' + (err.message || err));
+              console.error(err);
+            }
           },
 
-          logout() {
+          async onFileChange(e) {
+            const input = e.target;
+            const file = input.files && input.files[0];
+            if (!file) return;
+            if (!this.user || !this.user.id) {
+              alert('You must be logged in to upload an avatar');
+              return;
+            }
+            try {
+              const fd = new FormData();
+              fd.append('avatar', file);
+              const res = await this.apiUpload(
+                `/users/${this.user.id}/avatar`,
+                fd,
+                { method: 'POST' },
+              );
+              const avatarUrl = res?.avatarUrl || res?.avatar_url || res;
+              if (avatarUrl) {
+                this.user.avatar_url = avatarUrl;
+                this.editProfile.avatar_url = avatarUrl;
+                // clear the file input
+                if (this.$refs.avatarInput) this.$refs.avatarInput.value = null;
+              }
+            } catch (err) {
+              alert('Avatar upload failed: ' + (err.message || err));
+              console.error(err);
+            }
+          },
+
+          async logout() {
+            this.clearToken();
             this.user = {};
             this.selectedChat = null;
-            this.currentView = "login";
+            this.currentView = 'login';
           },
 
           selectChat(chat) {
@@ -1192,7 +1358,7 @@
                 content: this.newMessage.trim(),
                 sent: true,
                 timestamp: new Date(),
-                status: "sent",
+                status: 'sent',
               };
 
               this.selectedChat.messages.push(message);
@@ -1201,21 +1367,21 @@
                 timestamp: message.timestamp,
               };
 
-              this.newMessage = "";
+              this.newMessage = '';
               this.scrollToBottom();
 
               // Simulate message status updates
               setTimeout(() => {
-                message.status = "delivered";
+                message.status = 'delivered';
               }, 1000);
 
               setTimeout(() => {
-                message.status = "read";
+                message.status = 'read';
               }, 3000);
 
               // Move chat to top of list
               const chatIndex = this.chats.findIndex(
-                (c) => c.id === this.selectedChat.id
+                (c) => c.id === this.selectedChat.id,
               );
               if (chatIndex > 0) {
                 const chat = this.chats.splice(chatIndex, 1)[0];
@@ -1226,7 +1392,7 @@
 
           startNewChat(user) {
             const existingChat = this.chats.find(
-              (chat) => chat.name === user.name
+              (chat) => chat.name === user.name,
             );
             if (existingChat) {
               this.selectChat(existingChat);
@@ -1243,7 +1409,7 @@
               this.selectChat(newChat);
             }
             this.showNewChatModal = false;
-            this.newChatSearch = "";
+            this.newChatSearch = '';
           },
 
           scrollToBottom() {
@@ -1252,17 +1418,24 @@
                 this.$refs.messagesContainer.scrollTop =
                   this.$refs.messagesContainer.scrollHeight;
               }
+              // Focus the message input when scrolling to bottom (e.g. after selecting/opening a chat)
+              if (
+                this.$refs.messageInput &&
+                typeof this.$refs.messageInput.focus === 'function'
+              ) {
+                this.$refs.messageInput.focus();
+              }
             });
           },
 
           autoResize(event) {
             const textarea = event.target;
-            textarea.style.height = "auto";
-            textarea.style.height = Math.min(textarea.scrollHeight, 120) + "px";
+            textarea.style.height = 'auto';
+            textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
           },
 
           formatTime(date) {
-            if (!date) return "";
+            if (!date) return '';
 
             const now = new Date();
             const diff = now - date;
@@ -1271,7 +1444,7 @@
             const days = Math.floor(diff / 86400000);
 
             if (minutes < 1) {
-              return "now";
+              return 'now';
             } else if (minutes < 60) {
               return `${minutes}m`;
             } else if (hours < 24) {
@@ -1284,9 +1457,45 @@
           },
 
           init() {
-            window.addEventListener("resize", () => {
+            window.addEventListener('resize', () => {
               this.$nextTick();
             });
+            // Try restore session
+            this.loadProfileAndEnter().catch(() => {
+              // ignore - user not authenticated
+            });
+          },
+
+          async loadProfileAndEnter() {
+            const token = this.getToken();
+            if (!token) return;
+            try {
+              console.log('Attempting to restore session, token=', token);
+              const profile = await this.apiFetch('/auth/profile');
+              console.log('Profile fetched', profile);
+              // map backend user to frontend user shape
+              this.user = {
+                id: profile.id,
+                firstName: profile.name || '',
+                lastName: profile.surname || '',
+                username: profile.username,
+                description: profile.description || '',
+                avatar_url: profile.avatarUrl || null,
+              };
+              this.editProfile = {
+                firstName: this.user.firstName,
+                lastName: this.user.lastName,
+                username: this.user.username,
+                description: this.user.description,
+                avatar_url: this.user.avatar_url,
+              };
+              this.currentView = 'chat';
+            } catch (err) {
+              console.error('Failed to restore profile', err);
+              this.clearToken();
+              // surface a visible message for debugging
+              alert('Session restore failed: ' + (err.message || err));
+            }
           },
         };
       }
