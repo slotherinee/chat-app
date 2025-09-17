@@ -23,15 +23,17 @@ export class UserService {
     });
   }
 
-  async findOne(username: string) {
+  async findOne(username: string, omitPassword = true) {
     return this.prisma.user.findUnique({
       where: { username },
+      omit: { password: omitPassword },
     });
   }
 
-  async findById(id: string) {
+  async findById(id: string, omitPassword = true) {
     return this.prisma.user.findUnique({
       where: { id },
+      omit: { password: omitPassword },
     });
   }
 

@@ -9,6 +9,7 @@
       defer
       src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"
     ></script>
+    <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
     <script>
       tailwind.config = {
         theme: {
@@ -41,24 +42,48 @@
       }
       .online-indicator {
         position: relative;
+        z-index: 10;
       }
       .online-indicator::after {
         content: '';
         position: absolute;
-        bottom: 0;
-        right: 0;
-        width: 14px;
-        height: 14px;
+        bottom: 4px;
+        right: 4px;
+        width: 12px;
+        height: 12px;
         background: #10b981;
         border: 2px solid white;
         border-radius: 50%;
+        z-index: 100;
+        pointer-events: none;
+      }
+      .online-indicator img {
+        position: relative;
+        z-index: 0;
+        display: block;
       }
       .offline-indicator::after {
-        background: #6b7280;
+        display: none;
       }
     </style>
   </head>
   <body class="h-full bg-gray-50" x-data="chatApp()">
+    <!-- Debug Bar (shows socket status) -->
+    <div class="fixed top-4 right-4 z-50">
+      <div
+        class="bg-white/90 border rounded-xl p-3 shadow-lg text-xs text-gray-700"
+      >
+        <div class="mb-1">
+          <strong>WS:</strong> <span x-text="socketStatus"></span>
+        </div>
+        <div class="mb-1">
+          <strong>Last Ack:</strong> <span x-text="lastAckText"></span>
+        </div>
+        <div>
+          <strong>Last Msg:</strong> <span x-text="lastReceivedText"></span>
+        </div>
+      </div>
+    </div>
     <!-- Login/Register Pages -->
     <div
       x-show="currentView === 'login'"
@@ -257,13 +282,13 @@
               <div
                 class="h-12 w-12 bg-white rounded-full flex items-center justify-center online-indicator"
               >
-                <template x-if="user.avatar_url">
+                <template x-if="user.avatarUrl">
                   <img
-                    :src="user.avatar_url"
+                    :src="user.avatarUrl"
                     class="h-12 w-12 rounded-full object-cover"
                   />
                 </template>
-                <template x-if="!user.avatar_url">
+                <template x-if="!user.avatarUrl">
                   <span
                     class="text-primary font-semibold text-lg"
                     x-text="(user.firstName || '').charAt(0)"
@@ -351,14 +376,22 @@
           <template x-for="chat in filteredChats" :key="chat.id">
             <div
               @click="selectChat(chat)"
+              @dblclick.stop="selectedChat?.id === chat.id ? (selectedChat = null) : selectChat(chat)"
               class="flex items-center p-4 hover:bg-gray-50 cursor-pointer transition-all duration-200"
               :class="{'bg-primary/5 border-r-4 border-primary': selectedChat?.id === chat.id}"
             >
               <div
-                class="h-14 w-14 rounded-full flex-shrink-0 flex items-center justify-center relative"
+                class="h-14 w-14 rounded-full flex-shrink-0 flex items-center justify-center relative overflow-hidden"
                 :class="[chat.isOnline ? 'bg-primary online-indicator' : 'bg-gray-400 offline-indicator']"
               >
+                <img
+                  x-show="chat.avatarUrl"
+                  :src="chat.avatarUrl"
+                  alt="avatar"
+                  class="h-full w-full object-cover"
+                />
                 <span
+                  x-show="!chat.avatarUrl"
                   class="text-white font-semibold text-lg"
                   x-text="chat.name.charAt(0)"
                 ></span>
@@ -379,11 +412,32 @@
                   x-text="chat.lastMessage?.content || 'No messages yet'"
                 ></p>
               </div>
-              <div
-                x-show="chat.unreadCount > 0"
-                class="ml-3 bg-primary text-white text-xs rounded-full h-6 w-6 flex items-center justify-center font-medium"
-              >
-                <span x-text="chat.unreadCount"></span>
+              <div class="flex items-center space-x-2">
+                <div
+                  x-show="chat.unreadCount > 0"
+                  class="ml-3 bg-primary text-white text-xs rounded-full h-6 w-6 flex items-center justify-center font-medium"
+                >
+                  <span x-text="chat.unreadCount"></span>
+                </div>
+                <button
+                  @click.stop="deleteChat(chat)"
+                  class="p-2 text-gray-400 hover:text-red-600 rounded-full"
+                  title="Delete chat"
+                >
+                  <svg
+                    class="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
               </div>
             </div>
           </template>
@@ -456,7 +510,14 @@
                   :class="[selectedChat?.isOnline ? 'bg-primary online-indicator' : 'bg-gray-400 offline-indicator']"
                   @click="showUserInfo = true"
                 >
+                  <img
+                    x-show="selectedChat?.avatarUrl"
+                    :src="selectedChat?.avatarUrl"
+                    alt="avatar"
+                    class="h-full w-full object-cover rounded-full"
+                  />
                   <span
+                    x-show="!selectedChat?.avatarUrl"
                     class="text-white font-semibold text-lg"
                     x-text="selectedChat?.name.charAt(0)"
                   ></span>
@@ -635,13 +696,13 @@
               <div
                 class="h-24 w-24 mx-auto bg-primary rounded-full flex items-center justify-center mb-4 online-indicator"
               >
-                <template x-if="user.avatar_url">
+                <template x-if="user.avatarUrl">
                   <img
-                    :src="user.avatar_url"
+                    :src="user.avatarUrl"
                     class="h-24 w-24 rounded-full object-cover"
                   />
                 </template>
-                <template x-if="!user.avatar_url">
+                <template x-if="!user.avatarUrl">
                   <span
                     class="text-white text-3xl font-semibold"
                     x-text="(user.firstName || '').charAt(0)"
@@ -930,6 +991,7 @@
                 <div
                   @click="startNewChat(user)"
                   class="flex items-center space-x-4 p-4 hover:bg-gray-50 rounded-2xl cursor-pointer transition-all duration-200"
+                  :class="typeof user.id === 'number' ? 'opacity-50' : ''"
                 >
                   <div
                     class="h-12 w-12 rounded-full flex-shrink-0 flex items-center justify-center relative"
@@ -963,6 +1025,12 @@
                         x-text="user.description ? ' — ' + user.description : ''"
                       ></span>
                     </p>
+                    <div
+                      x-show="typeof user.id === 'number'"
+                      class="text-xs text-orange-500 mt-1"
+                    >
+                      Demo user - search for real users above
+                    </div>
                   </div>
                 </div>
               </template>
@@ -983,7 +1051,7 @@
             lastName: '',
             username: '',
             description: '',
-            avatar_url: null,
+            avatarUrl: null,
           },
           loginForm: {
             username: '',
@@ -1002,7 +1070,7 @@
             lastName: '',
             username: '',
             description: '',
-            avatar_url: '',
+            avatarUrl: '',
           },
           chats: [
             {
@@ -1213,9 +1281,7 @@
           setToken(token) {
             try {
               localStorage.setItem('token', token);
-            } catch (e) {
-              console.warn('Failed to save token', e);
-            }
+            } catch (e) {}
           },
           getToken() {
             try {
@@ -1264,9 +1330,10 @@
               this.setToken(token);
               await this.loadProfileAndEnter();
               this.loginForm = { username: '', password: '' };
+              this.connectSocket();
+              await this.loadChats();
             } catch (err) {
               alert('Login failed: ' + (err.message || err));
-              console.error(err);
             }
           },
 
@@ -1301,9 +1368,10 @@
                 confirmPassword: '',
                 description: '',
               };
+              this.connectSocket();
+              await this.loadChats();
             } catch (err) {
               alert('Register failed: ' + (err.message || err));
-              console.error(err);
             }
           },
 
@@ -1314,7 +1382,7 @@
                 name: this.editProfile.firstName || undefined,
                 surname: this.editProfile.lastName || undefined,
                 description: this.editProfile.description || undefined,
-                avatarUrl: this.editProfile.avatar_url || undefined,
+                avatarUrl: this.editProfile.avatarUrl || undefined,
                 username: this.editProfile.username || undefined,
               };
               await this.apiFetch(`/users/${this.user.id}`, {
@@ -1326,7 +1394,6 @@
               this.showProfileModal = false;
             } catch (err) {
               alert('Failed to update profile: ' + (err.message || err));
-              console.error(err);
             }
           },
 
@@ -1348,14 +1415,13 @@
               );
               const avatarUrl = res?.avatarUrl || res?.avatar_url || res;
               if (avatarUrl) {
-                this.user.avatar_url = avatarUrl;
-                this.editProfile.avatar_url = avatarUrl;
+                this.user.avatarUrl = avatarUrl;
+                this.editProfile.avatarUrl = avatarUrl;
                 // clear the file input
                 if (this.$refs.avatarInput) this.$refs.avatarInput.value = null;
               }
             } catch (err) {
               alert('Avatar upload failed: ' + (err.message || err));
-              console.error(err);
             }
           },
 
@@ -1366,47 +1432,103 @@
             this.currentView = 'login';
           },
 
+          async loadChats() {
+            try {
+              const list = await this.apiFetch('/chats');
+              const mapped = (list || []).map((c) => {
+                const otherParticipant = (c.participants || []).find(
+                  (p) => String(p.userId) !== String(this.user.id),
+                );
+                const other = otherParticipant?.user || null;
+                const last = (c.messages && c.messages[0]) || null;
+                return {
+                  id: c.id,
+                  name: (other?.name || other?.username || 'Chat').trim(),
+                  participantId: other?.id || otherParticipant?.userId || null,
+                  isOnline: false,
+                  unreadCount: 0,
+                  lastMessage: last
+                    ? {
+                        content: last.content,
+                        timestamp: new Date(last.createdAt),
+                      }
+                    : null,
+                  messages: [],
+                  avatarUrl: other?.avatarUrl || other?.avatar_url || null,
+                  _loaded: false,
+                };
+              });
+              this.chats = mapped;
+              // If currently selected chat exists in the newly loaded list, update selectedChat
+              if (this.selectedChat && this.selectedChat.id) {
+                const authoritative = this.chats.find(
+                  (c) => String(c.id) === String(this.selectedChat.id),
+                );
+                if (authoritative) {
+                  this.selectedChat = authoritative;
+                }
+              }
+            } catch (e) {}
+          },
+
           selectChat(chat) {
             this.selectedChat = chat;
             chat.unreadCount = 0;
-            this.scrollToBottom();
+            if (this.socket && chat?.id) {
+              this.socket.emit('join_chat', { chatId: chat.id });
+            }
+            if (!chat._loaded && chat.id) {
+              this.apiFetch(`/chats/${chat.id}/messages`).then((msgs) => {
+                chat.messages = (msgs || []).map((m) => ({
+                  id: m.id,
+                  content: m.content,
+                  sent: m.senderId === this.user.id,
+                  timestamp: new Date(m.createdAt),
+                }));
+                chat._loaded = true;
+                this.scrollToBottom();
+              });
+            } else {
+              this.scrollToBottom();
+            }
           },
 
           sendMessage() {
-            if (this.newMessage.trim() && this.selectedChat) {
-              const message = {
-                id: Date.now(),
-                content: this.newMessage.trim(),
-                sent: true,
-                timestamp: new Date(),
-                status: 'sent',
-              };
-
-              this.selectedChat.messages.push(message);
-              this.selectedChat.lastMessage = {
-                content: message.content,
-                timestamp: message.timestamp,
-              };
-
-              this.newMessage = '';
-              this.scrollToBottom();
-
-              setTimeout(() => {
-                message.status = 'delivered';
-              }, 1000);
-
-              setTimeout(() => {
-                message.status = 'read';
-              }, 3000);
-
-              const chatIndex = this.chats.findIndex(
-                (c) => c.id === this.selectedChat.id,
-              );
-              if (chatIndex > 0) {
-                const chat = this.chats.splice(chatIndex, 1)[0];
-                this.chats.unshift(chat);
-              }
-            }
+            const content = (this.newMessage || '').trim();
+            if (!content || !this.selectedChat || !this.socket) return;
+            const optimistic = {
+              id: `tmp-${Date.now()}`,
+              content,
+              sent: true,
+              timestamp: new Date(),
+              status: 'sending',
+            };
+            this.selectedChat.messages.push(optimistic);
+            this.selectedChat.lastMessage = {
+              content: optimistic.content,
+              timestamp: optimistic.timestamp,
+            };
+            this.newMessage = '';
+            this.scrollToBottom();
+            this.socket.emit(
+              'send_message',
+              { chatId: this.selectedChat.id, content },
+              (ack) => {
+                this.lastAckText = JSON.stringify(ack || {});
+                if (!ack || ack.error) {
+                  const i = this.selectedChat.messages.findIndex(
+                    (m) => m.id === optimistic.id,
+                  );
+                  if (i !== -1) this.selectedChat.messages[i].status = 'failed';
+                  alert('Failed to send message');
+                } else {
+                  const i = this.selectedChat.messages.findIndex(
+                    (m) => m.id === optimistic.id,
+                  );
+                  if (i !== -1) this.selectedChat.messages[i].status = 'sent';
+                }
+              },
+            );
           },
 
           get displayedAvailableUsers() {
@@ -1414,11 +1536,12 @@
               ? this.searchResults
               : this.availableUsers;
             const q = (this.newChatSearch || '').toLowerCase();
-            return list.filter((u) => {
+            const filtered = list.filter((u) => {
               const name = (u.name || '').toLowerCase();
               const username = (u.username || '').toLowerCase();
               return name.includes(q) || username.includes(q);
             });
+            return filtered;
           },
 
           async searchUser() {
@@ -1451,26 +1574,284 @@
             this.newChatSearch = '';
           },
 
-          startNewChat(user) {
+          // WebSocket connection
+          socket: null,
+          socketStatus: 'disconnected',
+          lastAckText: '',
+          lastReceivedText: '',
+          connectSocket() {
+            try {
+              const token = this.getToken();
+              if (!token) return;
+              if (this.socket && this.socket.connected) return;
+              this.socket = io('/ws', {
+                transports: ['websocket'],
+                auth: { token },
+                extraHeaders: { Authorization: `Bearer ${token}` },
+              });
+              this.socket.on('connect', () => {
+                this.socketStatus = 'connected';
+              });
+              this.socket.on('connect_error', (err) => {
+                this.socketStatus = 'error';
+                this.lastAckText = String(err?.message || err);
+              });
+              this.socket.on('disconnect', (reason) => {
+                this.socketStatus = 'disconnected';
+                this.lastAckText = String(reason || '');
+              });
+              this.socket.on('connected', () => {
+                this.socketStatus = 'ready';
+              });
+              this.socket.on('user_online', (ev) => {
+                try {
+                  const userId = ev.userId;
+                  const chatId = ev.chatId;
+                  // mark matching chat as online
+                  const chat = this.chats.find(
+                    (c) => c.id === chatId || c.participantId === userId,
+                  );
+                  if (chat) chat.isOnline = true;
+                } catch (e) {}
+              });
+              this.socket.on('user_offline', (ev) => {
+                try {
+                  const userId = ev.userId;
+                  const chatId = ev.chatId;
+                  const chat = this.chats.find(
+                    (c) => c.id === chatId || c.participantId === userId,
+                  );
+                  if (chat) chat.isOnline = false;
+                } catch (e) {}
+              });
+              this.socket.on('new_message', (msg) => {
+                try {
+                  const chatId = msg.chatId || msg.chat?.id || msg.chatId;
+                  let chat = this.chats.find((c) => c.id === chatId);
+                  // if chat not present, create lightweight entry
+                  if (!chat) {
+                    const other =
+                      msg.sender &&
+                      msg.sender.id &&
+                      msg.sender.id !== this.user.id
+                        ? msg.sender
+                        : null;
+                    chat = {
+                      id: chatId,
+                      name: (other?.name || other?.username || 'Chat').trim(),
+                      isOnline: false,
+                      unreadCount: 0,
+                      lastMessage: null,
+                      messages: [],
+                      avatarUrl: other?.avatarUrl || other?.avatar_url || null,
+                      _loaded: true,
+                    };
+                    this.chats.unshift(chat);
+                  }
+                  const isMine =
+                    msg.senderId === this.user.id ||
+                    (msg.sender && msg.sender.id === this.user.id);
+                  // mark sender as online if this message came from them
+                  if (!isMine) {
+                    chat.isOnline = true;
+                  }
+                  chat.messages = chat.messages || [];
+                  // If we have an optimistic message (tmp-...) that matches this incoming message,
+                  // replace it to avoid showing duplicate messages to the sender.
+                  const incomingMsg = {
+                    id: msg.id,
+                    content: msg.content,
+                    sent: isMine,
+                    timestamp: new Date(msg.createdAt),
+                    status: 'sent',
+                  };
+                  const matchIdx = chat.messages.findIndex((m) => {
+                    // Exact match by id (if already updated), or match optimistic by content + sending status
+                    if (!m) return false;
+                    if (m.id === msg.id) return true;
+                    if (
+                      m.status === 'sending' &&
+                      m.sent &&
+                      m.content === msg.content
+                    ) {
+                      // also allow small time drift
+                      try {
+                        const t1 = new Date(m.timestamp).getTime();
+                        const t2 = new Date(msg.createdAt).getTime();
+                        if (Math.abs(t1 - t2) < 5000) return true;
+                      } catch (e) {
+                        return true;
+                      }
+                    }
+                    return false;
+                  });
+                  if (matchIdx !== -1) {
+                    // replace optimistic message with authoritative server message
+                    chat.messages[matchIdx] = incomingMsg;
+                  } else {
+                    chat.messages.push(incomingMsg);
+                  }
+                  chat.lastMessage = {
+                    content: msg.content,
+                    timestamp: new Date(msg.createdAt),
+                  };
+                  if (!isMine && this.selectedChat?.id !== chat.id) {
+                    chat.unreadCount = (chat.unreadCount || 0) + 1;
+                  }
+                  this.scrollToBottom();
+                  this.lastReceivedText = `${msg.id || ''} ${msg.content ? (msg.content.length > 40 ? msg.content.slice(0, 40) + '...' : msg.content) : ''}`;
+                } catch (e) {}
+              });
+            } catch (e) {}
+          },
+
+          async startNewChat(user) {
+            // Check if current user is authenticated
+            if (!this.user || !this.user.id) {
+              alert('Please log in first');
+              return;
+            }
+
+            // Check if this is a dummy user (numeric ID) - if so, don't create chat
+            if (typeof user.id === 'number') {
+              alert(
+                'Please search for a real user first by typing their username and clicking Find',
+              );
+              return;
+            }
+
             const existingChat = this.chats.find(
-              (chat) => chat.name === user.name,
+              (chat) =>
+                String(chat.participantId) === String(user.id) ||
+                chat.name === user.name,
             );
+
             if (existingChat) {
               this.selectChat(existingChat);
             } else {
-              const newChat = {
-                id: Date.now(),
-                name: user.name,
-                isOnline: user.isOnline,
-                unreadCount: 0,
-                lastMessage: null,
-                messages: [],
-              };
-              this.chats.unshift(newChat);
-              this.selectChat(newChat);
+              try {
+                const created = await this.apiFetch('/chats/direct', {
+                  method: 'POST',
+                  body: JSON.stringify({ otherUserId: user.id }),
+                });
+
+                // Use the returned chat data directly instead of relying on loadChats
+                if (created && created.participants) {
+                  const otherParticipant = created.participants.find(
+                    (p) => String(p.userId) !== String(this.user.id),
+                  );
+                  const otherUser = otherParticipant?.user;
+
+                  if (otherUser) {
+                    const newChat = {
+                      id: created.id,
+                      name: (
+                        otherUser.name ||
+                        otherUser.username ||
+                        'Chat'
+                      ).trim(),
+                      participantId: otherUser.id,
+                      isOnline: false,
+                      unreadCount: 0,
+                      lastMessage: null,
+                      messages: [],
+                      avatarUrl:
+                        otherUser.avatarUrl || otherUser.avatar_url || null,
+                      _loaded: false,
+                    };
+
+                    // Add to chats list
+                    this.chats.unshift(newChat);
+                    this.selectChat(newChat);
+
+                    // Clear search and close modal
+                    this.showNewChatModal = false;
+                    this.newChatSearch = '';
+                    this.searchResults = [];
+                    return;
+                  } else {
+                    // Fallback: use the searched user data
+                    const newChat = {
+                      id: created.id,
+                      name: (user.name || user.username || 'Chat').trim(),
+                      participantId: user.id,
+                      isOnline: false,
+                      unreadCount: 0,
+                      lastMessage: null,
+                      messages: [],
+                      avatarUrl: user.avatarUrl || user.avatar_url || null,
+                      _loaded: false,
+                    };
+                    this.chats.unshift(newChat);
+                    this.selectChat(newChat);
+
+                    // Clear search and close modal
+                    this.showNewChatModal = false;
+                    this.newChatSearch = '';
+                    this.searchResults = [];
+                    return;
+                  }
+                }
+
+                // Fallback: reload chats if direct processing failed
+                await this.loadChats();
+                let realChat = this.chats.find(
+                  (c) => String(c.id) === String(created.id),
+                );
+
+                // If not found immediately, try again after a short delay (database propagation)
+                if (!realChat) {
+                  await new Promise((resolve) => setTimeout(resolve, 100));
+                  await this.loadChats();
+                  realChat = this.chats.find(
+                    (c) => String(c.id) === String(created.id),
+                  );
+                }
+
+                if (realChat) {
+                  this.selectChat(realChat);
+                } else {
+                  // Last resort fallback: use the searched user directly
+                  const newChat = {
+                    id: created.id,
+                    name: user.name.trim(),
+                    participantId: user.id,
+                    isOnline: user.isOnline || false,
+                    unreadCount: 0,
+                    lastMessage: null,
+                    messages: [],
+                    avatarUrl: user.avatarUrl || null,
+                    _loaded: false,
+                  };
+                  // remove any temp chat with same id
+                  const tempIdx = this.chats.findIndex(
+                    (c) => String(c.id) === String(newChat.id),
+                  );
+                  if (tempIdx !== -1) this.chats.splice(tempIdx, 1);
+                  this.chats.unshift(newChat);
+                  this.selectChat(newChat);
+                }
+              } catch (e) {}
             }
             this.showNewChatModal = false;
             this.newChatSearch = '';
+          },
+
+          async deleteChat(chat) {
+            if (!chat || !chat.id) return;
+            if (!confirm('Delete this chat? This cannot be undone.')) return;
+            try {
+              await this.apiFetch(`/chats/${encodeURIComponent(chat.id)}`, {
+                method: 'DELETE',
+              });
+              const idx = this.chats.findIndex((c) => c.id === chat.id);
+              if (idx !== -1) this.chats.splice(idx, 1);
+              if (this.selectedChat?.id === chat.id) {
+                this.selectedChat = null;
+              }
+            } catch (e) {
+              alert('Failed to delete chat: ' + (e.message || e));
+            }
           },
 
           scrollToBottom() {
@@ -1530,9 +1911,7 @@
             const token = this.getToken();
             if (!token) return;
             try {
-              console.log('Attempting to restore session, token=', token);
               const profile = await this.apiFetch('/auth/profile');
-              console.log('Profile fetched', profile);
               // map backend user to frontend user shape
               this.user = {
                 id: profile.id,
@@ -1540,18 +1919,19 @@
                 lastName: profile.surname || '',
                 username: profile.username,
                 description: profile.description || '',
-                avatar_url: profile.avatarUrl || null,
+                avatarUrl: profile.avatarUrl || null,
               };
               this.editProfile = {
                 firstName: this.user.firstName,
                 lastName: this.user.lastName,
                 username: this.user.username,
                 description: this.user.description,
-                avatar_url: this.user.avatar_url,
+                avatarUrl: this.user.avatarUrl,
               };
               this.currentView = 'chat';
+              this.connectSocket();
+              await this.loadChats();
             } catch (err) {
-              console.error('Failed to restore profile', err);
               this.clearToken();
               // surface a visible message for debugging
               alert('Session restore failed: ' + (err.message || err));

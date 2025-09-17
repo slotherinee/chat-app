@@ -25,5 +25,64 @@ model User {
   createdAt DateTime @map("created_at") @default(now())
   updatedAt DateTime @map("updated_at") @updatedAt
 
+  messagesSent   Message[] @relation("messagesSent")
+  chatParticipants ChatParticipant[]
+  messageReads   MessageRead[]
+
   @@map("user")
+}
+
+model Chat {
+  id          String   @db.Uuid @id @default(uuid())
+  title       String?  @db.VarChar(255)
+  isGroup     Boolean  @map("is_group") @default(false)
+  createdAt   DateTime @map("created_at") @default(now())
+  updatedAt   DateTime @map("updated_at") @updatedAt
+
+  participants ChatParticipant[]
+  messages     Message[]
+
+  @@map("chat")
+}
+
+model ChatParticipant {
+  id        String   @db.Uuid @id @default(uuid())
+  chatId    String   @map("chat_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  role      String?  @db.VarChar(50) // e.g., 'admin', 'member'
+  joinedAt  DateTime @map("joined_at") @default(now())
+
+  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([chatId, userId], map: "chat_participant_unique")
+  @@map("chat_participant")
+}
+
+model Message {
+  id         String   @db.Uuid @id @default(uuid())
+  chatId     String   @map("chat_id") @db.Uuid
+  senderId   String   @map("sender_id") @db.Uuid
+  content    String   @db.VarChar(5000)
+  createdAt  DateTime @map("created_at") @default(now())
+
+  chat   Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  sender User @relation("messagesSent", fields: [senderId], references: [id], onDelete: Cascade)
+
+  reads MessageRead[]
+
+  @@map("message")
+}
+
+model MessageRead {
+  id         String   @db.Uuid @id @default(uuid())
+  messageId  String   @map("message_id") @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  readAt     DateTime @map("read_at") @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId], map: "message_read_unique")
+  @@map("message_read")
 }
