@@ -1413,7 +1413,7 @@
                 fd,
                 { method: 'POST' },
               );
-              const avatarUrl = res?.avatarUrl || res?.avatar_url || res;
+              const avatarUrl = res?.avatarUrl || res;
               if (avatarUrl) {
                 this.user.avatarUrl = avatarUrl;
                 this.editProfile.avatarUrl = avatarUrl;
@@ -1435,30 +1435,25 @@
           async loadChats() {
             try {
               const list = await this.apiFetch('/chats');
-              const mapped = (list || []).map((c) => {
-                const otherParticipant = (c.participants || []).find(
-                  (p) => String(p.userId) !== String(this.user.id),
-                );
-                const other = otherParticipant?.user || null;
-                const last = (c.messages && c.messages[0]) || null;
-                return {
-                  id: c.id,
-                  name: (other?.name || other?.username || 'Chat').trim(),
-                  participantId: other?.id || otherParticipant?.userId || null,
-                  isOnline: false,
-                  unreadCount: 0,
-                  lastMessage: last
-                    ? {
-                        content: last.content,
-                        timestamp: new Date(last.createdAt),
-                      }
-                    : null,
-                  messages: [],
-                  avatarUrl: other?.avatarUrl || other?.avatar_url || null,
-                  _loaded: false,
-                };
-              });
-              this.chats = mapped;
+              // Backend now returns properly shaped responses, so we can use them directly
+              this.chats = (list || []).map((chat) => ({
+                id: chat.id,
+                name: chat.name,
+                participantId: chat.participantId,
+                isOnline: chat.isOnline,
+                unreadCount: chat.unreadCount || 0,
+                lastMessage: chat.lastMessage
+                  ? {
+                      content: chat.lastMessage.content,
+                      timestamp: new Date(chat.lastMessage.timestamp),
+                    }
+                  : null,
+                messages: chat.messages || [],
+                avatarUrl: chat.avatarUrl,
+                _loaded: chat._loaded || false,
+                participants: chat.participants, // Keep for backward compatibility
+              }));
+
               // If currently selected chat exists in the newly loaded list, update selectedChat
               if (this.selectedChat && this.selectedChat.id) {
                 const authoritative = this.chats.find(
@@ -1468,7 +1463,9 @@
                   this.selectedChat = authoritative;
                 }
               }
-            } catch (e) {}
+            } catch (e) {
+              console.error('Failed to load chats:', e);
+            }
           },
 
           selectChat(chat) {
@@ -1479,14 +1476,47 @@
             }
             if (!chat._loaded && chat.id) {
               this.apiFetch(`/chats/${chat.id}/messages`).then((msgs) => {
-                chat.messages = (msgs || []).map((m) => ({
-                  id: m.id,
-                  content: m.content,
-                  sent: m.senderId === this.user.id,
-                  timestamp: new Date(m.createdAt),
-                }));
-                chat._loaded = true;
-                this.scrollToBottom();
+                try {
+                  const serverMsgs = (msgs || []).map((m) => ({
+                    id: m.id,
+                    content: m.content,
+                    sent: m.senderId === this.user.id,
+                    timestamp: new Date(m.createdAt),
+                    status: 'sent',
+                  }));
+
+                  // Preserve optimistic messages (tmp-...) and merge them with server messages
+                  chat.messages = chat.messages || [];
+                  const optimistic = chat.messages.filter((m) =>
+                    String(m.id).startsWith('tmp-'),
+                  );
+
+                  // Replace any optimistic messages that the server already returned
+                  const merged = serverMsgs.slice();
+                  optimistic.forEach((opt) => {
+                    const matchIdx = merged.findIndex((sm) => {
+                      if (!sm) return false;
+                      if (sm.id === opt.id) return true;
+                      if (
+                        sm.content === opt.content &&
+                        Math.abs(
+                          new Date(sm.timestamp).getTime() -
+                            new Date(opt.timestamp).getTime(),
+                        ) < 5000
+                      ) {
+                        return true;
+                      }
+                      return false;
+                    });
+                    if (matchIdx === -1) merged.push(opt);
+                  });
+
+                  chat.messages = merged;
+                  chat._loaded = true;
+                  this.scrollToBottom();
+                } catch (e) {
+                  console.error('Error loading messages for chat:', e);
+                }
               });
             } else {
               this.scrollToBottom();
@@ -1626,7 +1656,16 @@
               });
               this.socket.on('new_message', (msg) => {
                 try {
-                  const chatId = msg.chatId || msg.chat?.id || msg.chatId;
+                  // Normalize chat id and timestamp fields
+                  const chatId =
+                    msg.chatId || (msg.chat && msg.chat.id) || msg.chat_id;
+                  const rawTimestamp =
+                    msg.createdAt ||
+                    msg.timestamp ||
+                    msg.created_at ||
+                    new Date();
+                  const createdAt = new Date(rawTimestamp);
+
                   let chat = this.chats.find((c) => c.id === chatId);
                   // if chat not present, create lightweight entry
                   if (!chat) {
@@ -1643,64 +1682,147 @@
                       unreadCount: 0,
                       lastMessage: null,
                       messages: [],
-                      avatarUrl: other?.avatarUrl || other?.avatar_url || null,
+                      avatarUrl: other?.avatarUrl || null,
                       _loaded: true,
                     };
                     this.chats.unshift(chat);
                   }
+
                   const isMine =
-                    msg.senderId === this.user.id ||
-                    (msg.sender && msg.sender.id === this.user.id);
-                  // mark sender as online if this message came from them
-                  if (!isMine) {
-                    chat.isOnline = true;
-                  }
+                    (msg.senderId &&
+                      String(msg.senderId) === String(this.user.id)) ||
+                    (msg.sender &&
+                      msg.sender.id &&
+                      String(msg.sender.id) === String(this.user.id));
+
+                  if (!isMine) chat.isOnline = true;
+
                   chat.messages = chat.messages || [];
-                  // If we have an optimistic message (tmp-...) that matches this incoming message,
-                  // replace it to avoid showing duplicate messages to the sender.
+
                   const incomingMsg = {
                     id: msg.id,
                     content: msg.content,
-                    sent: isMine,
-                    timestamp: new Date(msg.createdAt),
-                    status: 'sent',
+                    sent: Boolean(isMine),
+                    timestamp: createdAt,
+                    status: msg.status || 'sent',
                   };
-                  const matchIdx = chat.messages.findIndex((m) => {
-                    // Exact match by id (if already updated), or match optimistic by content + sending status
-                    if (!m) return false;
-                    if (m.id === msg.id) return true;
-                    if (
-                      m.status === 'sending' &&
-                      m.sent &&
-                      m.content === msg.content
-                    ) {
-                      // also allow small time drift
-                      try {
-                        const t1 = new Date(m.timestamp).getTime();
-                        const t2 = new Date(msg.createdAt).getTime();
-                        if (Math.abs(t1 - t2) < 5000) return true;
-                      } catch (e) {
-                        return true;
+
+                  const existedBefore = chat.messages.some(
+                    (m) => m && m.id === incomingMsg.id,
+                  );
+
+                  let matchIdx = -1;
+                  matchIdx = chat.messages.findIndex(
+                    (m) => m && m.id === incomingMsg.id,
+                  );
+                  if (matchIdx === -1) {
+                    matchIdx = chat.messages.findIndex((m) => {
+                      if (!m) return false;
+                      if (
+                        m.status === 'sending' &&
+                        m.sent &&
+                        m.content === incomingMsg.content
+                      ) {
+                        try {
+                          const t1 = new Date(m.timestamp).getTime();
+                          const t2 = new Date(incomingMsg.timestamp).getTime();
+                          return Math.abs(t1 - t2) < 7000;
+                        } catch (err) {
+                          return true;
+                        }
                       }
-                    }
-                    return false;
-                  });
+                      return false;
+                    });
+                  }
+
                   if (matchIdx !== -1) {
                     // replace optimistic message with authoritative server message
                     chat.messages[matchIdx] = incomingMsg;
                   } else {
                     chat.messages.push(incomingMsg);
                   }
+
+                  // Always update lastMessage to server-provided timestamp/content
                   chat.lastMessage = {
-                    content: msg.content,
-                    timestamp: new Date(msg.createdAt),
+                    content: incomingMsg.content,
+                    timestamp: incomingMsg.timestamp,
                   };
-                  if (!isMine && this.selectedChat?.id !== chat.id) {
+
+                  // Update unread count: increment only for remote messages when chat isn't open
+                  // and this message wasn't already present (avoid double increments from duplicate events)
+                  if (
+                    !incomingMsg.sent &&
+                    this.selectedChat?.id !== chat.id &&
+                    !existedBefore
+                  ) {
                     chat.unreadCount = (chat.unreadCount || 0) + 1;
                   }
-                  this.scrollToBottom();
-                  this.lastReceivedText = `${msg.id || ''} ${msg.content ? (msg.content.length > 40 ? msg.content.slice(0, 40) + '...' : msg.content) : ''}`;
-                } catch (e) {}
+
+                  // If the message belongs to currently selected chat, ensure scroll and marking
+                  if (this.selectedChat?.id === chat.id) {
+                    this.scrollToBottom();
+                  }
+
+                  this.lastReceivedText = `${incomingMsg.id || ''} ${incomingMsg.content ? (incomingMsg.content.length > 40 ? incomingMsg.content.slice(0, 40) + '...' : incomingMsg.content) : ''}`;
+                } catch (e) {
+                  console.error('Error handling new_message:', e);
+                }
+              });
+              this.socket.on('new_chat', (chatData) => {
+                try {
+                  // Check if chat already exists to avoid duplicates
+                  const existingChat = this.chats.find(
+                    (c) => c.id === chatData.id,
+                  );
+                  if (!existingChat) {
+                    this.chats.unshift(chatData);
+
+                    // If this chat comes with messages (first message), handle them
+                    if (chatData.messages && chatData.messages.length > 0) {
+                      const chat = this.chats.find((c) => c.id === chatData.id);
+                      if (chat) {
+                        chat.messages = chatData.messages.map((m) => ({
+                          id: m.id,
+                          content: m.content,
+                          sent: m.senderId === this.user.id,
+                          timestamp: new Date(m.timestamp),
+                          status: m.status || 'sent',
+                        }));
+                        chat.lastMessage = chatData.lastMessage;
+                        // Respect explicit unreadCount from server. Default to 1 only if undefined.
+                        chat.unreadCount =
+                          typeof chatData.unreadCount === 'number'
+                            ? chatData.unreadCount
+                            : 1;
+                        chat._loaded = true; // Mark as loaded since we have the messages
+
+                        // Scroll to bottom if this chat is currently selected
+                        if (this.selectedChat?.id === chatData.id) {
+                          this.scrollToBottom();
+                        }
+                      }
+                    }
+                  }
+                } catch (e) {
+                  console.error('Error handling new_chat event:', e);
+                }
+              });
+              this.socket.on('chat_deleted', (data) => {
+                try {
+                  const chatId = data.chatId;
+                  const chatIndex = this.chats.findIndex(
+                    (c) => c.id === chatId,
+                  );
+                  if (chatIndex !== -1) {
+                    this.chats.splice(chatIndex, 1);
+                    // If the deleted chat was selected, clear selection
+                    if (this.selectedChat?.id === chatId) {
+                      this.selectedChat = null;
+                    }
+                  }
+                } catch (e) {
+                  console.error('Error handling chat_deleted event:', e);
+                }
               });
             } catch (e) {}
           },
@@ -1735,106 +1857,47 @@
                   body: JSON.stringify({ otherUserId: user.id }),
                 });
 
-                // Use the returned chat data directly instead of relying on loadChats
-                if (created && created.participants) {
-                  const otherParticipant = created.participants.find(
-                    (p) => String(p.userId) !== String(this.user.id),
-                  );
-                  const otherUser = otherParticipant?.user;
-
-                  if (otherUser) {
-                    const newChat = {
-                      id: created.id,
-                      name: (
-                        otherUser.name ||
-                        otherUser.username ||
-                        'Chat'
-                      ).trim(),
-                      participantId: otherUser.id,
-                      isOnline: false,
-                      unreadCount: 0,
-                      lastMessage: null,
-                      messages: [],
-                      avatarUrl:
-                        otherUser.avatarUrl || otherUser.avatar_url || null,
-                      _loaded: false,
-                    };
-
-                    // Add to chats list
-                    this.chats.unshift(newChat);
-                    this.selectChat(newChat);
-
-                    // Clear search and close modal
-                    this.showNewChatModal = false;
-                    this.newChatSearch = '';
-                    this.searchResults = [];
-                    return;
-                  } else {
-                    // Fallback: use the searched user data
-                    const newChat = {
-                      id: created.id,
-                      name: (user.name || user.username || 'Chat').trim(),
-                      participantId: user.id,
-                      isOnline: false,
-                      unreadCount: 0,
-                      lastMessage: null,
-                      messages: [],
-                      avatarUrl: user.avatarUrl || user.avatar_url || null,
-                      _loaded: false,
-                    };
-                    this.chats.unshift(newChat);
-                    this.selectChat(newChat);
-
-                    // Clear search and close modal
-                    this.showNewChatModal = false;
-                    this.newChatSearch = '';
-                    this.searchResults = [];
-                    return;
-                  }
-                }
-
-                // Fallback: reload chats if direct processing failed
-                await this.loadChats();
-                let realChat = this.chats.find(
-                  (c) => String(c.id) === String(created.id),
-                );
-
-                // If not found immediately, try again after a short delay (database propagation)
-                if (!realChat) {
-                  await new Promise((resolve) => setTimeout(resolve, 100));
-                  await this.loadChats();
-                  realChat = this.chats.find(
-                    (c) => String(c.id) === String(created.id),
-                  );
-                }
-
-                if (realChat) {
-                  this.selectChat(realChat);
-                } else {
-                  // Last resort fallback: use the searched user directly
+                // Backend now returns properly shaped response, so we can use it directly
+                if (created) {
                   const newChat = {
                     id: created.id,
-                    name: user.name.trim(),
-                    participantId: user.id,
-                    isOnline: user.isOnline || false,
-                    unreadCount: 0,
-                    lastMessage: null,
-                    messages: [],
-                    avatarUrl: user.avatarUrl || null,
-                    _loaded: false,
+                    name: created.name,
+                    participantId: created.participantId,
+                    isOnline: created.isOnline,
+                    unreadCount: created.unreadCount || 0,
+                    lastMessage: created.lastMessage,
+                    messages: created.messages || [],
+                    avatarUrl: created.avatarUrl,
+                    _loaded: created._loaded || false,
+                    participants: created.participants, // Keep for backward compatibility
                   };
-                  // remove any temp chat with same id
-                  const tempIdx = this.chats.findIndex(
-                    (c) => String(c.id) === String(newChat.id),
-                  );
-                  if (tempIdx !== -1) this.chats.splice(tempIdx, 1);
+
+                  // Add to chats list
                   this.chats.unshift(newChat);
                   this.selectChat(newChat);
+
+                  // Workaround: briefly close and reopen the chat so the UI
+                  // attaches optimistic messages and socket events to the
+                  // authoritative chat object (simulate a double-tap).
+                  try {
+                    setTimeout(() => {
+                      try {
+                        this.selectedChat = null;
+                        this.selectChat(newChat);
+                      } catch (e) {}
+                    }, 80);
+                  } catch (e) {}
+                } else {
+                  throw new Error('Failed to create chat');
                 }
-              } catch (e) {}
+              } catch (e) {
+                console.error('Failed to create chat:', e);
+                alert('Failed to create chat: ' + (e.message || e));
+              }
             }
             this.showNewChatModal = false;
             this.newChatSearch = '';
+            this.searchResults = [];
           },
 
           async deleteChat(chat) {
